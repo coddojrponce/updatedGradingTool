@@ -31,10 +31,9 @@ var studentArray = [];
 // *******************************************Regex****************************************************
 
 
-function useRegex(input) {
-    let regex = /src.*=.*".*"/i;
-    return regex.test(input);
-}
+let goodWords = [/flex[" "]{0,1}\:/g, /justify-content[" "]{0,1}\:/g, /align-items[" "]{0,1}\:/g];
+let badWords = [/position[" "]{0,1}\:/g, /float[" "]{0,1}\:/g];
+let imgRegex = /src[" "]{0,1}\=[" "]{0,1}(\'|\")[" "]{0,1}(.*)\.(png|jpg|[a-zA-Z])[" "]{0,1}(\'|\"){1}/g
 
 
 // *******************************************function used to unzip****************************************************
@@ -173,8 +172,7 @@ async function readHTML() {
 
             const HTMLString = readHTML.toString();
 
-            const idxImage = HTMLString.indexOf("<img");
-            var imagePerc = imageStringHandler(idxImage, HTMLString);
+            let imageInfo = imageStringHandler(HTMLString)
 
             const perc = (100 * compare(rubricHTMLString, HTMLString)).toFixed(2);
 
@@ -191,9 +189,11 @@ async function readHTML() {
                 Name: folderArray[i][0],
                 HTML: perc,
                 HTMLVerificationError: { array: `${vHTML[1]}`, errorsFound: vHTML[0] },
+                GoodCSS:"",
+                BadCSS:"",
                 CSS: "",
                 JS: "",
-                ImgSrc: imagePerc,
+                Img: imageInfo,
                 atRisk: " 🙂 Low 👍",
                 DuplicatePageErrors: errors,
             });
@@ -206,41 +206,14 @@ async function readHTML() {
                 HTMLVerificationError: "No HTML page to base it on" ,
                 CSS: "",
                 JS: "",
-                ImgSrc: "No HTML page to pull src string from",
-                atRisk: " 🙂 Low 👍",
+                Img: "No HTML page to pull src string from",
+                atRisk: " 🙂 High ",
                 DuplicatePageErrors: errors,
                 errors:"No HTML File Found" 
             });
             errors = ""
         }
 
-
-        // const readHTML = await fs.promises.readFile(
-        //     `${directory}/${folderArray[i][0]}/${HTML}`
-        // );
-
-        // const HTMLString = readHTML.toString();
-
-        // const idxImage = HTMLString.indexOf("<img");
-        // var imagePerc = imageStringHandler(idxImage, HTMLString);
-
-        // COMPARES SIMILARITY TO THE RUBRIC
-        // const perc = (100 * compare(rubricHTMLString, HTMLString)).toFixed(2);
-
-        // var vHTML = await verifyHTML(`${directory}/${folderArray[i][0]}/${HTML}`);
-
-        // creates a student array with these key,value pairs
-        // studentArray.push({
-        //     Name: folderArray[i][0],
-        //     HTML: perc,
-        //     HTMLVerificationError: { array: `${vHTML[1]}`, errorsFound: vHTML[0] },
-        //     CSS: "",
-        //     JS: "",
-        //     ImgSrc: imagePerc,
-        //     atRisk: " 🙂 Low 👍",
-        //     DuplicatePageErrors: errors,
-        // });
-        // errors = "None";
     }
 }
 
@@ -307,11 +280,44 @@ function readCSS() {
             if(CSS.length !== 0){
                 const buffer = fs.readFileSync(`${directory}/${folderArray[i][0]}/${CSS}`);
     
-                const CSSString = buffer.toString();
+                const studentCSSString = buffer.toString();
 
-                const perc = (100 * compare(rubricCSSString, CSSString)).toFixed(2);
+                let wordArray = {
+                    good:[],
+                    bad:[]
+                }
+                
+                let wordCount = {
+                    good:0,
+                    bad:0
+                }
+                
+                
+                    badWords.map((item,index)=>{
+                        let myMatch = [...studentCSSString.matchAll(badWords[index])]
+                
+                        myMatch.map((item,index)=>{
+                            wordCount.bad++
+                            wordArray.bad.push(item[0])
+                            return item['index'];
+                        })
+                    })
+                
+                    goodWords.map((item,index)=>{
+                        let myMatch = [...studentCSSString.matchAll(goodWords[index])]
+                
+                        myMatch.map((item,index)=>{
+                            wordArray.good.push(item[0])
+                            wordCount.good++
+                            return item['index'];
+                        })
+                    })
+
+                const perc = (100 * compare(rubricCSSString, studentCSSString)).toFixed(2);
 
                 studentArray[idx]["CSS"] = perc;
+                studentArray[idx]["GoodCSS"] = `Good: ${wordArray.good}`
+                studentArray[idx]["BadCSS"] = wordArray.length > 0 ? `Bad: ${wordArray.bad}`:`None`
                 
                 if (errors.length > 1) {
                     studentArray[idx]["DuplicatePageErrors"] = `${studentArray[idx]["DuplicatePageErrors"]}, and ${errors}`;
@@ -429,63 +435,15 @@ function compare(str1, str2) {
     }
 }
 
-function imageLinking(str2) {
+
+function imageStringHandler(HTMLString) {
 
     try{
-        const imgArray = [
-            "src='assets/myimage.png'",
-            "src='./assets/myimage.png'",
-            "src='images/myimage.png'",
-            "src='./images/myimage.png'",
-            "src='./images/myimage.jpg'",
-            "src='images/myimage.jpg'",
-            "src='img/myimage.jpg'",
-            "src='./img/myimage.jpg'",
-            "src='img/myimage.png'",
-            "src='./img/myimage.png'",
-        ];
-    
-        for (var i = 0; i < imgArray.length; i++) {
-            if (compare(imgArray[i], str2) > 0.4) {
-                return `👍 ${compare(imgArray[i], str2)}  IMGPATH: src='${str2}'`;
-            }
-        }
-    
-        return `Might Have Trouble Linking ${compare(
-            imgArray[1],
-            str2
-        )} IMGPATH: src='${str2}'`;
+        const userImages = [...HTMLString.matchAll(imgRegex)].map((item,idx)=>(item[0]))
+                    if(userImages.length !==0){
+                        return (`Images ${userImages} `)
 
-
-    }
-    catch(err){
-        console.log(`Error at imageLinking function : ${err}`)
-    }
-    
-}
-
-function imageStringHandler(idxImage, HTMLString) {
-
-    try{
-        if (idxImage == -1) {
-            // console.log("missing")
-            return `🚨 Might be Missing an Image `;
-        } else {
-            // console.log("not missing")
-            const imageString = HTMLString.slice(idxImage, idxImage + 90);
-            // console.log(imageString)
-            const idxsrcString = imageString.indexOf("src=");
-            // console.log(idxsrcString)
-            const splitSt = imageString.split('"');
-            // console.log(splitSt)
-            for (var j = 0; j < splitSt.length; j++) {
-                if (splitSt[j].includes("src=")) {
-                    // console.log("includes " + j)
-                    // console.log(splitSt[j+1])
-                    return imageLinking(splitSt[j + 1]);
-                }
-            }
-        }
+                    }
 
     }catch(err){
         console.log(`There has been an error at imageStringHandler : ${err}`)
